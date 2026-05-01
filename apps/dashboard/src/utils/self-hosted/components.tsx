@@ -201,6 +201,20 @@ export function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [oidcConfig, setOidcConfig] = useState<OidcConfig>(DEFAULT_OIDC_CONFIG);
+
+  useEffect(() => {
+    fetchOidcConfig().then((cfg) => {
+      setOidcConfig(cfg);
+      if (cfg.onlyMode) {
+        navigate('/auth/sign-in', { replace: true });
+      }
+    });
+  }, [navigate]);
+
+  if (oidcConfig.onlyMode) {
+    return null;
+  }
 
   const validatePassword = (password: string) => {
     const hasUpperCase = /[A-Z]/.test(password);

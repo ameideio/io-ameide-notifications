@@ -140,6 +140,9 @@ export class AuthController {
   @Post('/register')
   @Header('Cache-Control', 'no-store')
   async userRegistration(@Body() body: UserRegistrationBodyDto) {
+    if (OidcService.isOidcOnly()) {
+      throw new NotFoundException('Email/password sign-up is disabled; use OIDC sign-in.');
+    }
     return await this.userRegisterUsecase.execute(
       UserRegisterCommand.create({
         email: body.email,
@@ -179,6 +182,9 @@ export class AuthController {
   @Post('/login')
   @Header('Cache-Control', 'no-store')
   async userLogin(@Body() body: LoginBodyDto) {
+    if (OidcService.isOidcOnly()) {
+      throw new NotFoundException('Email/password sign-in is disabled; use OIDC sign-in.');
+    }
     return await this.loginUsecase.execute(
       LoginCommand.create({
         email: body.email,
