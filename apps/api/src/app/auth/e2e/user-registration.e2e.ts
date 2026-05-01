@@ -41,6 +41,28 @@ describe('User registration - /auth/register (POST) #novu-v0-os', async () => {
     (process.env as Record<string, string>).DISABLE_USER_REGISTRATION = 'false';
   });
 
+  it('should refuse register and login when IS_OIDC_ONLY is true', async () => {
+    (process.env as Record<string, string>).IS_OIDC_ONLY = 'true';
+
+    const registerResp = await session.testAgent.post('/v1/auth/register').send({
+      email: 'oidc-only@example.com',
+      firstName: 'O',
+      lastName: 'Only',
+      password: '123@Qwerty',
+    });
+    expect(registerResp.body.statusCode).to.equal(404);
+    expect(JSON.stringify(registerResp.body)).to.include('OIDC');
+
+    const loginResp = await session.testAgent.post('/v1/auth/login').send({
+      email: 'oidc-only@example.com',
+      password: '123@Qwerty',
+    });
+    expect(loginResp.body.statusCode).to.equal(404);
+    expect(JSON.stringify(loginResp.body)).to.include('OIDC');
+
+    (process.env as Record<string, string>).IS_OIDC_ONLY = 'false';
+  });
+
   it('should create a new user successfully', async () => {
     const { body } = await session.testAgent.post('/v1/auth/register').send({
       email: 'Testy.test@gmail.com',

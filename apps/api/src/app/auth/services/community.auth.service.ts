@@ -111,6 +111,10 @@ export class CommunityAuthService implements IAuthService {
         user = await this.updateUserUsername(user, profile, authProvider);
       }
 
+      if (authProvider === AuthProviderEnum.OIDC) {
+        user = await this.refreshOidcProfile(user, profile);
+      }
+
       this.analyticsService.track('[Authentication] - Login', user._id, {
         loginType: authProvider,
       });
@@ -122,6 +126,29 @@ export class CommunityAuthService implements IAuthService {
       newUser,
       token: await this.generateUserToken(user),
     };
+  }
+
+  private async refreshOidcProfile(
+    user: UserEntity,
+    profile: { name: string; login: string; email: string; avatar_url: string; id: string }
+  ) {
+    const updates: Partial<UserEntity> = {};
+
+    if (profile.name) {
+      const firstName = profile.name.split(' ').slice(0, -1).join(' ') || profile.name;
+      const lastName = profile.name.split(' ').slice(-1).join(' ') || null;
+      if (firstName && firstName !== user.firstName) updates.firstName = firstName;
+      if (lastName && lastName !== user.lastName) updates.lastName = lastName;
+    }
+    if (profile.avatar_url && profile.avatar_url !== user.profilePicture) {
+      updates.profilePicture = profile.avatar_url;
+    }
+
+    if (Object.keys(updates).length === 0) return user;
+
+    await this.userRepository.update({ _id: user._id }, { $set: updates });
+    const refreshed = await this.userRepository.findById(user._id);
+    return refreshed || user;
   }
 
   private async updateUserUsername(

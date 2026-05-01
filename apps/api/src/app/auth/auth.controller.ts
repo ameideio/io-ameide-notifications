@@ -29,6 +29,7 @@ import { UpdatePasswordBodyDto } from './dtos/update-password.dto';
 import { UserRegistrationBodyDto } from './dtos/user-registration.dto';
 import { RequireAuthentication } from './framework/auth.decorator';
 import { AuthService } from './services/auth.service';
+import { OidcService } from './services/oidc.service';
 import { LoginCommand } from './usecases/login/login.command';
 import { Login } from './usecases/login/login.usecase';
 import { PasswordResetCommand } from './usecases/password-reset/password-reset.command';
@@ -58,6 +59,7 @@ export class AuthController {
     private passwordResetRequestUsecase: PasswordResetRequest,
     private passwordResetUsecase: PasswordReset,
     private updatePasswordUsecase: UpdatePassword,
+    private oidcService: OidcService,
     private logger: PinoLogger
   ) {
     this.logger.setContext(this.constructor.name);
@@ -88,6 +90,44 @@ export class AuthController {
     return response.redirect(url);
   }
 
+  @Get('/oidc/config')
+  @Header('Cache-Control', 'no-store')
+  oidcConfig() {
+    return {
+      enabled: OidcService.isEnabled(),
+      onlyMode: OidcService.isOidcOnly(),
+      providerName: OidcService.getProviderDisplayName(),
+    };
+  }
+
+  @Get('/oidc')
+  async oidcAuthorize(@Query('redirectUrl') redirectUrl: string | undefined, @Res() response) {
+    if (!OidcService.isEnabled()) {
+      throw new NotFoundException('OIDC is not enabled');
+    }
+
+    const { url } = await this.oidcService.authorize(redirectUrl);
+    return response.redirect(url);
+  }
+
+  @Get('/oidc/callback')
+  async oidcCallback(@Req() request, @Res() response) {
+    if (!OidcService.isEnabled()) {
+      throw new NotFoundException('OIDC is not enabled');
+    }
+
+    const baseRedirect = `${process.env.DASHBOARD_URL || process.env.FRONT_BASE_URL || ''}/auth/sign-in`;
+    try {
+      const { token, newUser } = await this.oidcService.handleCallback(request.query);
+      const params = new URLSearchParams({ token });
+      if (newUser) params.set('newUser', 'true');
+      return response.redirect(`${baseRedirect}?${params.toString()}`);
+    } catch (err) {
+      this.logger.warn({ err: (err as Error)?.message }, 'OIDC callback failed');
+      return response.redirect(`${baseRedirect}?error=OidcAuthenticationError`);
+    }
+  }
+
   @Get('/refresh')
   @RequireAuthentication()
   @Header('Cache-Control', 'no-store')
@@ -100,6 +140,9 @@ export class AuthController {
   @Post('/register')
   @Header('Cache-Control', 'no-store')
   async userRegistration(@Body() body: UserRegistrationBodyDto) {
+    if (OidcService.isOidcOnly()) {
+      throw new NotFoundException('Email/password sign-up is disabled; use OIDC sign-in.');
+    }
     return await this.userRegisterUsecase.execute(
       UserRegisterCommand.create({
         email: body.email,
@@ -139,6 +182,9 @@ export class AuthController {
   @Post('/login')
   @Header('Cache-Control', 'no-store')
   async userLogin(@Body() body: LoginBodyDto) {
+    if (OidcService.isOidcOnly()) {
+      throw new NotFoundException('Email/password sign-in is disabled; use OIDC sign-in.');
+    }
     return await this.loginUsecase.execute(
       LoginCommand.create({
         email: body.email,
