@@ -7,6 +7,48 @@ import { API_HOSTNAME } from '../../config';
 
 const JWT_STORAGE_KEY = 'self-hosted-jwt';
 
+type OidcConfig = {
+  enabled: boolean;
+  onlyMode: boolean;
+  providerName: string;
+};
+
+const DEFAULT_OIDC_CONFIG: OidcConfig = {
+  enabled: false,
+  onlyMode: false,
+  providerName: 'OIDC',
+};
+
+async function fetchOidcConfig(): Promise<OidcConfig> {
+  try {
+    const response = await fetch(`${API_HOSTNAME}/v1/auth/oidc/config`, { credentials: 'omit' });
+    if (!response.ok) return DEFAULT_OIDC_CONFIG;
+    const payload = await response.json();
+    const data = payload?.data ?? payload;
+    return {
+      enabled: Boolean(data?.enabled),
+      onlyMode: Boolean(data?.onlyMode),
+      providerName: data?.providerName || DEFAULT_OIDC_CONFIG.providerName,
+    };
+  } catch {
+    return DEFAULT_OIDC_CONFIG;
+  }
+}
+
+function consumeOidcTokenFromUrl(navigate: ReturnType<typeof useNavigate>): boolean {
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get('token');
+  const error = url.searchParams.get('error');
+  if (error) {
+    return false;
+  }
+  if (!token) return false;
+  localStorage.setItem(JWT_STORAGE_KEY, token);
+  (window as any).Clerk = { ...((window as any).Clerk || {}), loggedIn: true };
+  navigate('/');
+  return true;
+}
+
 export function OrganizationList() {
   return <></>;
 }
@@ -25,6 +67,20 @@ export function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [oidcConfig, setOidcConfig] = useState<OidcConfig>(DEFAULT_OIDC_CONFIG);
+
+  useEffect(() => {
+    if (consumeOidcTokenFromUrl(navigate)) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('error') === 'OidcAuthenticationError') {
+      setError('OIDC sign-in failed. Please try again or contact your administrator.');
+    }
+    fetchOidcConfig().then(setOidcConfig);
+  }, [navigate]);
+
+  const handleOidcSignIn = () => {
+    window.location.href = `${API_HOSTNAME}/v1/auth/oidc`;
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -60,57 +116,76 @@ export function SignIn() {
     }
   };
 
+  const showPasswordForm = !oidcConfig.onlyMode;
+
   return (
     <div className="mx-auto w-full max-w-md pt-12">
       <h2 className="mb-6 text-center text-xl font-semibold">Sign In</h2>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
-            Email
-          </label>
-          <Input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-            placeholder="user@example.com"
-            required
-            className="w-full"
-          />
+      {oidcConfig.enabled && (
+        <div className="mb-6 space-y-3">
+          <Button type="button" onClick={handleOidcSignIn} variant="primary" mode="filled" className="w-full">
+            {`Sign in with ${oidcConfig.providerName}`}
+          </Button>
+          {showPasswordForm && (
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <span className="h-px flex-1 bg-gray-200" />
+              <span>or</span>
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+          )}
         </div>
-        <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
-            Password
-          </label>
-          <Input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-            placeholder="Password"
-            required
-            className="w-full"
-          />
-        </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" disabled={isLoading} variant="primary" mode="filled" className="w-full">
-          {isLoading ? 'Signing In...' : 'Sign In'}
-        </Button>
-        <p className="mt-4 text-center text-sm text-gray-600">
-          Don&apos;t have an account?{' '}
-          <span
-            role="button"
-            tabIndex={0}
-            className="text-primary-base focus:ring-primary-base/50 cursor-pointer font-medium hover:underline focus:outline-hidden focus:ring-2"
-            onClick={() => navigate('/auth/sign-up')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') navigate('/auth/sign-up');
-            }}
-          >
-            Sign Up
-          </span>
-        </p>
-      </form>
+      )}
+      {showPasswordForm && (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+              Email
+            </label>
+            <Input
+              type="email"
+              id="email"
+              value={email}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+              placeholder="user@example.com"
+              required
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+              Password
+            </label>
+            <Input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+              placeholder="Password"
+              required
+              className="w-full"
+            />
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <Button type="submit" disabled={isLoading} variant="primary" mode="filled" className="w-full">
+            {isLoading ? 'Signing In...' : 'Sign In'}
+          </Button>
+          <p className="mt-4 text-center text-sm text-gray-600">
+            Don&apos;t have an account?{' '}
+            <span
+              role="button"
+              tabIndex={0}
+              className="text-primary-base focus:ring-primary-base/50 cursor-pointer font-medium hover:underline focus:outline-hidden focus:ring-2"
+              onClick={() => navigate('/auth/sign-up')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') navigate('/auth/sign-up');
+              }}
+            >
+              Sign Up
+            </span>
+          </p>
+        </form>
+      )}
+      {!showPasswordForm && error && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
     </div>
   );
 }
