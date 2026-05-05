@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import {
   BuildStepDataUsecase,
   BuildVariableSchemaUsecase,
@@ -18,7 +18,7 @@ import { SharedModule } from '../shared/shared.module';
 import { LayoutsController } from './layouts.controller';
 import { USE_CASES } from './usecases';
 
-const MODULES = [SharedModule, AuthModule, LayoutsV1Module];
+const MODULES = [SharedModule, forwardRef(() => AuthModule), LayoutsV1Module];
 
 @Module({
   imports: MODULES,
