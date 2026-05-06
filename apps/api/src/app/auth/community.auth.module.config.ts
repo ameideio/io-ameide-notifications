@@ -1,16 +1,18 @@
-import { MiddlewareConsumer, ModuleMetadata, Provider, RequestMethod } from '@nestjs/common';
+import { forwardRef, MiddlewareConsumer, ModuleMetadata, Provider, RequestMethod } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { CommunityMemberRepository, CommunityOrganizationRepository, CommunityUserRepository } from '@novu/dal';
 import { AuthProviderEnum, PassportStrategyEnum } from '@novu/shared';
 import passport from 'passport';
 import { EnvironmentsModuleV1 } from '../environments-v1/environments-v1.module';
+import { OrganizationModule } from '../organization/organization.module';
 import { SharedModule } from '../shared/shared.module';
 import { UserModule } from '../user/user.module';
 import { AuthController } from './auth.controller';
 import { RootEnvironmentGuard } from './framework/root-environment-guard.service';
 import { AuthService } from './services/auth.service';
 import { CommunityAuthService } from './services/community.auth.service';
+import { OidcService } from './services/oidc.service';
 import { ApiKeyStrategy } from './services/passport/apikey.strategy';
 import { GitHubStrategy } from './services/passport/github.strategy';
 import { JwtStrategy } from './services/passport/jwt.strategy';
@@ -36,7 +38,7 @@ export function getCommunityAuthModuleConfig(): ModuleMetadata {
     }),
   ];
 
-  const baseProviders = [...AUTH_STRATEGIES, AuthService, RootEnvironmentGuard];
+  const baseProviders = [...AUTH_STRATEGIES, AuthService, OidcService, RootEnvironmentGuard];
 
   // Wherever is the string token used, override it with the provider
   const injectableProviders = [
@@ -59,7 +61,13 @@ export function getCommunityAuthModuleConfig(): ModuleMetadata {
   ];
 
   return {
-    imports: [...baseImports, EnvironmentsModuleV1, SharedModule, UserModule],
+    imports: [
+      ...baseImports,
+      EnvironmentsModuleV1,
+      SharedModule,
+      UserModule,
+      forwardRef(() => OrganizationModule),
+    ],
     controllers: [AuthController],
     providers: [...baseProviders, ...injectableProviders, ...USE_CASES],
     exports: [

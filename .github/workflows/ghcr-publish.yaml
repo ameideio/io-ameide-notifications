@@ -1,0 +1,179 @@
+name: Publish Ameide GHCR Images
+
+on:
+  push:
+    branches:
+      - next
+  workflow_dispatch:
+    inputs:
+      build_api:
+        description: "Build API service"
+        required: false
+        type: boolean
+        default: true
+      build_worker:
+        description: "Build Worker service"
+        required: false
+        type: boolean
+        default: true
+      build_dashboard:
+        description: "Build Dashboard service"
+        required: false
+        type: boolean
+        default: true
+      build_ws:
+        description: "Build WebSocket service"
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY_OWNER: ameideio
+  IMAGE_PREFIX: io-ameide-notifications
+
+jobs:
+  setup_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Generate Build Matrix
+        id: set-matrix
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            matrix='["api","worker","dashboard","ws"]'
+          else
+            services=()
+            if [ "${{ github.event.inputs.build_api }}" == "true" ]; then
+              services+=("\"api\"")
+            fi
+            if [ "${{ github.event.inputs.build_worker }}" == "true" ]; then
+              services+=("\"worker\"")
+            fi
+            if [ "${{ github.event.inputs.build_dashboard }}" == "true" ]; then
+              services+=("\"dashboard\"")
+            fi
+            if [ "${{ github.event.inputs.build_ws }}" == "true" ]; then
+              services+=("\"ws\"")
+            fi
+            if [ ${#services[@]} -eq 0 ]; then
+              echo "Error: At least one service must be selected for building."
+              exit 1
+            fi
+            matrix="[$(IFS=','; echo "${services[*]}")]"
+          fi
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo "Building services: $matrix"
+
+  build_and_publish:
+    needs: setup_matrix
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.setup_matrix.outputs.matrix) }}
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v5
+
+      - name: Compute version + image
+        shell: bash
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BRANCH_TAG=$(echo "${{ github.ref_name }}" | sed 's|/|-|g')
+          IMAGE="ghcr.io/${REGISTRY_OWNER}/${IMAGE_PREFIX}-${{ matrix.service }}"
+          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_ENV
+          echo "BRANCH_TAG=${BRANCH_TAG}" >> $GITHUB_ENV
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
+          echo "Building ${IMAGE} for branch=${BRANCH_TAG} sha=${SHORT_SHA}"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Docker
+        uses: crazy-max/ghaction-setup-docker@v2
+        with:
+          version: v27.0.3
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
+      - name: Set Up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: "image=moby/buildkit:v0.15.0"
+          platforms: linux/amd64
+
+      - uses: ./.github/actions/free-space
+        name: Extend space in Action Container
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.service }} Community Docker Image
+        shell: bash
+        env:
+          DOCKER_BUILD_ARGUMENTS: >
+            --cache-from type=gha,scope=${{ matrix.service }}
+            --cache-to type=gha,mode=max,scope=${{ matrix.service }}
+            --platform=linux/amd64 --provenance=false
+        run: |
+          cp scripts/dotenvcreate.mjs apps/${{ matrix.service }}/src/dotenvcreate.mjs
+          cd apps/${{ matrix.service }}
+
+          if [ "${{ matrix.service }}" == "worker" ]; then
+            cd src/ && echo -e "\nIS_SELF_HOSTED=true" >> .example.env && cd ..
+          elif [ "${{ matrix.service }}" == "dashboard" ]; then
+            echo -e "\nVITE_SELF_HOSTED=true" >> .env
+          fi
+
+          # Switch from PM2 cluster mode to single node process for open source builds
+          if [[ "${{ matrix.service }}" =~ ^(api|worker|ws)$ ]]; then
+            echo "Switching ${{ matrix.service }} from PM2 cluster mode to single node process for open source"
+            sed -i.bak 's/pm2-runtime start dist\/main\.js -i max/node dist\/main.js/g' Dockerfile && rm -f Dockerfile.bak
+          fi
+
+          pnpm run docker:build
+          docker images
+
+      - name: Tag and push image
+        id: push
+        shell: bash
+        run: |
+          docker tag novu-${{ matrix.service }} "${IMAGE}:${BRANCH_TAG}"
+          docker tag novu-${{ matrix.service }} "${IMAGE}:sha-${SHORT_SHA}"
+          docker push "${IMAGE}:${BRANCH_TAG}"
+          docker push "${IMAGE}:sha-${SHORT_SHA}"
+
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}:${BRANCH_TAG}" || true)
+          echo "Pushed ${IMAGE}:${BRANCH_TAG}"
+          echo "Pushed ${IMAGE}:sha-${SHORT_SHA}"
+          echo "Repo digest (informational): ${DIGEST}"
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
