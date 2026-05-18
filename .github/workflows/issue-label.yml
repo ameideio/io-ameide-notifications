@@ -11,7 +11,7 @@ concurrency:
 jobs:
   check:
     name: Verify
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     steps:
       - uses: actions/checkout@v5
 

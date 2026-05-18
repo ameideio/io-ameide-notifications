@@ -41,7 +41,7 @@ env:
 jobs:
   release:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     permissions:
       contents: write
       pull-requests: write
@@ -174,7 +174,7 @@ jobs:
 
   publish-stable:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-') && contains(github.event.pull_request.labels.*.name, 'automated-npm-release')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     permissions:
       contents: write
       id-token: write

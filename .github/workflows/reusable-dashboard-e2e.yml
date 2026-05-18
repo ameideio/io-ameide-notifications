@@ -171,7 +171,7 @@ jobs:
     # Merge reports after playwright-tests, even if some shards have failed
     if: ${{ !cancelled() }}
     needs: [e2e_dashboard]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4

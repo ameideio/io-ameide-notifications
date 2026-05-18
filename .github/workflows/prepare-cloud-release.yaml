@@ -12,7 +12,7 @@ on:
 
 jobs:
   prepare-cloud-release:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     permissions:
       contents: write
       pull-requests: write

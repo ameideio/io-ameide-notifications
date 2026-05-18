@@ -86,7 +86,7 @@ on:
 
 jobs:
   prepare-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     if: "${{ github.event.inputs.rollback_signoff == 'I agree' }}"
     outputs:
       env_matrix: ${{ steps.set-matrix.outputs.env_matrix }}
@@ -286,7 +286,7 @@ jobs:
 
   rollback:
     needs: [prepare-matrix]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     strategy:
       matrix:
         env: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment }}
