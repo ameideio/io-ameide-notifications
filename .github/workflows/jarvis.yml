@@ -6,7 +6,7 @@ on:
 jobs:
   add-comment:
     if: github.event.label.name == '@novu/api-service'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     permissions:
       issues: write
     steps:

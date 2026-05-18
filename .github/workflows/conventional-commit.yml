@@ -13,7 +13,7 @@ permissions:
 jobs:
   main:
     name: Validate PR titles
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5

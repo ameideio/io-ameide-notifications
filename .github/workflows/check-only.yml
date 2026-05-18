@@ -7,7 +7,7 @@ on:
 jobs:
   check-only:
     name: Check for .only in tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     timeout-minutes: 5
 
     steps:
