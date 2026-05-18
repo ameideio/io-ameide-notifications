@@ -25,7 +25,7 @@ on:
 jobs:
   check_submodule_token:
     name: Check if submodule token exists
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     outputs:
       has_token: ${{ steps.secret-check.outputs.has_token }}
     steps:
@@ -39,7 +39,7 @@ jobs:
           fi
 
   validate-submodule-sync:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     needs: [check_submodule_token]
     if: needs.check_submodule_token.outputs.has_token == 'true'
 

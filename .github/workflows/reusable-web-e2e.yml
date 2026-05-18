@@ -32,7 +32,7 @@ jobs:
         total: [4]
 
     # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     timeout-minutes: 80
 
     permissions:
@@ -124,7 +124,7 @@ jobs:
     # Merge reports after playwright-tests, even if some shards have failed
     if: ${{ !cancelled() }}
     needs: [e2e_web]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4

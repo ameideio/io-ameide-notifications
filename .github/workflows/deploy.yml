@@ -69,7 +69,7 @@ on:
 
 jobs:
   prepare-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     outputs:
       env_matrix: ${{ steps.set-matrix.outputs.env_matrix }}
       service_matrix: ${{ steps.set-matrix.outputs.service_matrix }}
@@ -277,7 +277,7 @@ jobs:
 
   run-clickhouse-migrations:
     needs: prepare-matrix
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     strategy:
       matrix:
         env: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment }}
@@ -327,7 +327,7 @@ jobs:
   build:
     needs: [prepare-matrix, run-clickhouse-migrations]
     timeout-minutes: 60
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     environment: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment[0] }}
     strategy:
       matrix:
@@ -396,7 +396,7 @@ jobs:
 
   deploy:
     needs: [build, prepare-matrix, run-clickhouse-migrations]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     strategy:
       matrix:
         env: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment }}
@@ -438,7 +438,7 @@ jobs:
 
   sentry_release:
     needs: [deploy, prepare-matrix]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     strategy:
       matrix:
         service: ${{ fromJson(needs.prepare-matrix.outputs.service_matrix).service }}
@@ -470,7 +470,7 @@ jobs:
   new_relic_release:
     needs: [deploy, prepare-matrix]
     if: ${{ fromJson(needs.prepare-matrix.outputs.nr_matrix) != '[]' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     strategy:
       matrix:
         env: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment }}
@@ -490,7 +490,7 @@ jobs:
 
   sync_novu_state:
     needs: [deploy, prepare-matrix]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     if: github.event.inputs.deploy_api == 'true'
     environment: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment[0] }}
     steps:
@@ -502,7 +502,7 @@ jobs:
 
   webhook_notification:
     needs: [deploy, prepare-matrix]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     if: |
       always() && 
       needs.deploy.result == 'success' && 

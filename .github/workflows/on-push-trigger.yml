@@ -12,8 +12,7 @@ permissions:
 
 jobs:
   trigger-deploy-workflow:
-    runs-on: ubuntu-latest
-
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
