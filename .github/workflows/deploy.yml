@@ -327,7 +327,7 @@ jobs:
   build:
     needs: [prepare-matrix, run-clickhouse-migrations]
     timeout-minutes: 60
-    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
+    runs-on: ${{ vars.AMEIDE_DIND_RUNS_ON }}
     environment: ${{ fromJson(needs.prepare-matrix.outputs.env_matrix).environment[0] }}
     strategy:
       matrix:

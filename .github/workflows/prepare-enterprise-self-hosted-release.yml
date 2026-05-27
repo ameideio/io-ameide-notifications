@@ -101,7 +101,7 @@ jobs:
 
   build_docker:
     needs: setup_matrix
-    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
+    runs-on: ${{ vars.AMEIDE_DIND_RUNS_ON }}
     timeout-minutes: 90
     environment: Production
     strategy:
