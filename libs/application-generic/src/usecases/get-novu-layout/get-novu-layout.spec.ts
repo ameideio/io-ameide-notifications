@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+// nx-ignore-next-line: spec-only helper; application-generic production build does not depend on testing.
 import { UserSession } from '@novu/testing';
 
 import { GetNovuLayout } from './get-novu-layout.usecase';

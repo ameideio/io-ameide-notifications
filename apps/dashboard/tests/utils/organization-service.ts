@@ -1,5 +1,6 @@
 import { ClerkClient } from '@clerk/backend';
 import { CommunityOrganizationRepository } from '@novu/dal';
+// nx-ignore-next-line: test utility only; dashboard production build does not depend on EE auth.
 import { EEOrganizationRepository } from '@novu/ee-auth';
 
 export class OrganizationService {

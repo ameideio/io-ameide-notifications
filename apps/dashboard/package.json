@@ -199,6 +199,10 @@
           "command": "npx biome lint apps/dashboard"
         }
       }
-    }
+    },
+    "implicitDependencies": [
+      "!@novu/ee-auth",
+      "!@novu/testing"
+    ]
   }
 }
