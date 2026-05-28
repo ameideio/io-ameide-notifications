@@ -1,18 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { JobRepository, JobEntity } from '@novu/dal';
+import {
+  CreateExecutionDetails,
+  CreateExecutionDetailsCommand,
+  DetailEnum,
+  getNestedValue,
+  Instrument,
+} from '@novu/application-generic';
+import { JobEntity, JobRepository } from '@novu/dal';
 import {
   ExecutionDetailsSourceEnum,
   ExecutionDetailsStatusEnum,
   IDigestBaseMetadata,
   StepTypeEnum,
 } from '@novu/shared';
-import {
-  DetailEnum,
-  Instrument,
-  getNestedValue,
-  ExecutionLogRoute,
-  ExecutionLogRouteCommand,
-} from '@novu/application-generic';
 
 import { PlatformException } from '../../../../shared/utils';
 
@@ -20,7 +20,10 @@ const LOG_CONTEXT = 'GetDigestEvents';
 
 @Injectable()
 export abstract class GetDigestEvents {
-  constructor(protected jobRepository: JobRepository, private executionLogRoute: ExecutionLogRoute) {}
+  constructor(
+    protected jobRepository: JobRepository,
+    private createExecutionDetails: CreateExecutionDetails
+  ) {}
 
   @Instrument()
   protected async filterJobs(currentJob: JobEntity, transactionId: string, jobs: JobEntity[]) {
@@ -34,16 +37,16 @@ export abstract class GetDigestEvents {
       {
         _environmentId: currentJob._environmentId,
         _subscriberId: currentJob._subscriberId,
-        transactionId: transactionId,
+        transactionId,
         type: StepTypeEnum.TRIGGER,
       },
       '_id'
     )) as Pick<JobEntity, '_id'>;
 
     if (!currentTrigger) {
-      await this.executionLogRoute.execute(
-        ExecutionLogRouteCommand.create({
-          ...ExecutionLogRouteCommand.getDetailsFromJob(currentJob),
+      await this.createExecutionDetails.execute(
+        CreateExecutionDetailsCommand.create({
+          ...CreateExecutionDetailsCommand.getDetailsFromJob(currentJob),
           detail: DetailEnum.DIGEST_TRIGGERED_EVENTS,
           source: ExecutionDetailsSourceEnum.INTERNAL,
           status: ExecutionDetailsStatusEnum.FAILED,
@@ -53,7 +56,7 @@ export abstract class GetDigestEvents {
       );
 
       const message = `Trigger job for jobId ${currentJob._id} is not found`;
-      Logger.error(message, LOG_CONTEXT);
+      Logger.log(message, LOG_CONTEXT);
       throw new PlatformException(message);
     }
 

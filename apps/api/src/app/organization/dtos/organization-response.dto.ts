@@ -1,6 +1,6 @@
-import { PartnerTypeEnum, DirectionEnum } from '@novu/dal';
-import { IsObject, IsArray, IsString, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DirectionEnum, PartnerTypeEnum } from '@novu/dal';
+import { IsArray, IsEnum, IsObject, IsString } from 'class-validator';
 import { UpdateBrandingDetailsDto } from './update-branding-details.dto';
 
 export class IPartnerConfigurationResponseDto {
@@ -22,7 +22,7 @@ export class IPartnerConfigurationResponseDto {
   teamId: string;
 
   @ApiProperty({
-    enum: { ...PartnerTypeEnum },
+    enum: PartnerTypeEnum,
     description: 'Partner Type Enum',
   })
   @IsEnum(PartnerTypeEnum)
@@ -31,7 +31,7 @@ export class IPartnerConfigurationResponseDto {
 
 export class OrganizationBrandingResponseDto extends UpdateBrandingDetailsDto {
   @ApiPropertyOptional({
-    enum: { ...DirectionEnum },
+    enum: DirectionEnum,
   })
   @IsString()
   direction?: DirectionEnum;

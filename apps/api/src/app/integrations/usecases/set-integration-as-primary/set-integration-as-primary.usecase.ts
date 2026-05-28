@@ -1,17 +1,19 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { AnalyticsService, PinoLogger } from '@novu/application-generic';
 import { IntegrationEntity, IntegrationRepository } from '@novu/dal';
 import { CHANNELS_WITH_PRIMARY } from '@novu/shared';
-import { AnalyticsService, buildIntegrationKey, InvalidateCacheService } from '@novu/application-generic';
 
 import { SetIntegrationAsPrimaryCommand } from './set-integration-as-primary.command';
 
 @Injectable()
 export class SetIntegrationAsPrimary {
   constructor(
-    private invalidateCache: InvalidateCacheService,
     private integrationRepository: IntegrationRepository,
-    private analyticsService: AnalyticsService
-  ) {}
+    private analyticsService: AnalyticsService,
+    private logger: PinoLogger
+  ) {
+    this.logger.setContext(this.constructor.name);
+  }
 
   private async updatePrimaryFlag({ existingIntegration }: { existingIntegration: IntegrationEntity }) {
     await this.integrationRepository.update(
@@ -46,7 +48,7 @@ export class SetIntegrationAsPrimary {
   }
 
   async execute(command: SetIntegrationAsPrimaryCommand): Promise<IntegrationEntity> {
-    Logger.verbose('Executing Set Integration As Primary Usecase');
+    this.logger.trace('Executing Set Integration As Primary Usecase');
 
     const existingIntegration = await this.integrationRepository.findOne({
       _id: command.integrationId,
@@ -70,12 +72,6 @@ export class SetIntegrationAsPrimary {
       channel,
       _organizationId,
       _environmentId,
-    });
-
-    await this.invalidateCache.invalidateQuery({
-      key: buildIntegrationKey().invalidate({
-        _organizationId,
-      }),
     });
 
     await this.updatePrimaryFlag({ existingIntegration });

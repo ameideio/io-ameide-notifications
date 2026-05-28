@@ -5,12 +5,12 @@ on:
       - labeled
 jobs:
   add-comment:
-    if: github.event.label.name == '@novu/api'
-    runs-on: ubuntu-latest
+    if: github.event.label.name == '@novu/api-service'
+    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
     permissions:
       issues: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - id: get-comment-body
         run: |
           ls -la

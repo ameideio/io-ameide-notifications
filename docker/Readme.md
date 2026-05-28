@@ -23,13 +23,33 @@ git clone https://github.com/novuhq/novu
 cd novu/docker
 
 # Copy the example env file
-cp .env.example ./local/deployment/.env
+cp .env.example ./local/.env
 
 # Start Novu
-docker-compose -f ./local/deployment/docker-compose.yml up
+docker-compose -f ./local/docker-compose.yml up
 ```
 
 Now visit [http://127.0.0.1:4200](http://127.0.0.1:4200) to start using Novu.
+
+### Managing services
+
+#### Running all services
+
+For local development, you'll typically need to run all dependency services:
+
+```sh
+# Start all dependency services (recommended)
+docker-compose -f docker/local/docker-compose.yml up -d
+```
+
+#### Running specific services
+
+If you only need specific services running (for development or resource management), you can start individual services by specifying their names. This is particularly useful when you already have some services running locally on your system and want to avoid port conflicts or resource duplication:
+
+```sh
+# Run only ClickHouse
+docker-compose -f docker/local/docker-compose.yml up -d clickhouse
+```
 
 ### Securing your setup
 

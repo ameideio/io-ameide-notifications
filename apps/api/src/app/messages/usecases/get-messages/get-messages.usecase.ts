@@ -1,17 +1,16 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { MessageEntity, MessageRepository, SubscriberEntity } from '@novu/dal';
+import { FeatureFlagsService } from '@novu/application-generic';
+import { MessageEntity, MessageRepository, OrganizationEntity, SubscriberEntity } from '@novu/dal';
 import { ActorTypeEnum, FeatureFlagsKeysEnum } from '@novu/shared';
-
-import { GetMessagesCommand } from './get-messages.command';
 import { GetSubscriber, GetSubscriberCommand } from '../../../subscribers/usecases/get-subscriber';
-import { GetFeatureFlag, GetFeatureFlagCommand } from '@novu/application-generic';
+import { GetMessagesCommand } from './get-messages.command';
 
 @Injectable()
 export class GetMessages {
   constructor(
     private messageRepository: MessageRepository,
     private getSubscriberUseCase: GetSubscriber,
-    private getFeatureFlag: GetFeatureFlag
+    private featureFlagService: FeatureFlagsService
   ) {}
 
   async execute(command: GetMessagesCommand) {
@@ -22,10 +21,13 @@ export class GetMessages {
       throw new BadRequestException('Limit can not be larger then 1000');
     }
 
-    const query: Partial<Omit<MessageEntity, 'transactionId'>> & { _environmentId: string; transactionId?: string[] } =
-      {
-        _environmentId: command.environmentId,
-      };
+    const query: Partial<Omit<MessageEntity, 'transactionId'>> & {
+      _environmentId: string;
+      transactionId?: string[];
+      contextKeys?: string[];
+    } = {
+      _environmentId: command.environmentId,
+    };
 
     if (command.subscriberId) {
       const subscriber = await this.getSubscriberUseCase.execute(
@@ -47,8 +49,13 @@ export class GetMessages {
       query.transactionId = command.transactionIds;
     }
 
+    if (command.contextKeys) {
+      query.contextKeys = command.contextKeys;
+    }
+
     const data = await this.messageRepository.getMessages(query, '', {
       limit: LIMIT,
+      sort: { createdAt: -1 },
       skip: command.page * LIMIT,
     });
 
@@ -58,14 +65,11 @@ export class GetMessages {
       }
     }
 
-    const isEnabled = await this.getFeatureFlag.execute(
-      GetFeatureFlagCommand.create({
-        key: FeatureFlagsKeysEnum.IS_NEW_MESSAGES_API_RESPONSE_ENABLED,
-        organizationId: command.organizationId,
-        userId: 'system',
-        environmentId: 'system',
-      })
-    );
+    const isEnabled = await this.featureFlagService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_NEW_MESSAGES_API_RESPONSE_ENABLED,
+      organization: { _id: command.organizationId } as OrganizationEntity,
+      defaultValue: false,
+    });
 
     if (isEnabled) {
       return {

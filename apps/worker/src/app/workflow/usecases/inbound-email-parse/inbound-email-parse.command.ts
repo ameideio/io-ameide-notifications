@@ -1,4 +1,3 @@
-import { IsDefined, IsNumber, IsOptional, IsString } from 'class-validator';
 import {
   BaseCommand,
   IConnection,
@@ -9,6 +8,7 @@ import {
   IInboundParseDataDto,
   ITo,
 } from '@novu/application-generic';
+import { IsDefined, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class InboundEmailParseCommand extends BaseCommand implements IInboundParseDataDto {
   @IsDefined()
@@ -29,6 +29,13 @@ export class InboundEmailParseCommand extends BaseCommand implements IInboundPar
   @IsDefined()
   @IsString()
   messageId: string;
+
+  @IsOptional()
+  @IsString()
+  inReplyTo?: string;
+
+  @IsOptional()
+  references?: string | string[];
 
   @IsDefined()
   @IsString()

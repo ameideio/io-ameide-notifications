@@ -1,16 +1,14 @@
-import { Injectable, NotFoundException, Scope } from '@nestjs/common';
-import { IntegrationRepository, DalException } from '@novu/dal';
-import { CHANNELS_WITH_PRIMARY } from '@novu/shared';
-import { buildIntegrationKey, InvalidateCacheService } from '@novu/application-generic';
+import { BadRequestException, Injectable, NotFoundException, Scope } from '@nestjs/common';
+import { DalException, IntegrationEntity, IntegrationRepository } from '@novu/dal';
+import { CHANNELS_WITH_PRIMARY, ChannelTypeEnum, EmailProviderIdEnum, SmsProviderIdEnum } from '@novu/shared';
 
 import { RemoveIntegrationCommand } from './remove-integration.command';
-import { ApiException } from '../../../shared/exceptions/api.exception';
 
 @Injectable({
   scope: Scope.REQUEST,
 })
 export class RemoveIntegration {
-  constructor(private invalidateCache: InvalidateCacheService, private integrationRepository: IntegrationRepository) {}
+  constructor(private integrationRepository: IntegrationRepository) {}
 
   async execute(command: RemoveIntegrationCommand) {
     try {
@@ -21,12 +19,6 @@ export class RemoveIntegration {
       if (!existingIntegration) {
         throw new NotFoundException(`Entity with id ${command.integrationId} not found`);
       }
-
-      await this.invalidateCache.invalidateQuery({
-        key: buildIntegrationKey().invalidate({
-          _organizationId: command.organizationId,
-        }),
-      });
 
       await this.integrationRepository.delete({
         _id: existingIntegration._id,
@@ -43,7 +35,7 @@ export class RemoveIntegration {
       }
     } catch (e) {
       if (e instanceof DalException) {
-        throw new ApiException(e.message);
+        throw new BadRequestException(e.message);
       }
       throw e;
     }

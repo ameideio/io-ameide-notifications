@@ -1,12 +1,12 @@
+import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
-import { AnalyticsController } from './analytics.controller';
 import { SharedModule } from '../shared/shared.module';
-import { AnalyticsService } from '@novu/application-generic';
-import { AuthModule } from '../auth/auth.module';
+import { AnalyticsController } from './analytics.controller';
+import { HubspotIdentifyFormUsecase } from './usecases/hubspot-identify-form/hubspot-identify-form.usecase';
 
 @Module({
-  imports: [SharedModule, AuthModule],
+  imports: [SharedModule, HttpModule],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService],
+  providers: [HubspotIdentifyFormUsecase],
 })
 export class AnalyticsModule {}

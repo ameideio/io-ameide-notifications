@@ -1,9 +1,9 @@
-import { IsDefined, IsObject, IsOptional, IsString, ValidateIf, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, getSchemaPath } from '@nestjs/swagger';
-import { TriggerRecipientSubscriber, TriggerTenantContext } from '@novu/shared';
-
-import { SubscriberPayloadDto, TenantPayloadDto } from './trigger-event-request.dto';
+import { ApiContextPayload, IsValidContextPayload } from '@novu/application-generic';
+import { ContextPayload, TriggerRecipientSubscriber, TriggerTenantContext } from '@novu/shared';
+import { Type } from 'class-transformer';
+import { IsDefined, IsObject, IsOptional, IsString, ValidateIf, ValidateNested } from 'class-validator';
+import { SubscriberPayloadDto, TenantPayloadDto, TriggerOverrides } from './trigger-event-request.dto';
 
 export class TriggerEventToAllRequestDto {
   @ApiProperty({
@@ -15,17 +15,21 @@ export class TriggerEventToAllRequestDto {
   name: string;
 
   @ApiProperty({
-    description: `The payload object is used to pass additional custom information that could be used to render the template, or perform routing rules based on it. 
-      This data will also be available when fetching the notifications feed from the API to display certain parts of the UI.`,
     example: {
       comment_id: 'string',
       post: {
         text: 'string',
       },
     },
+    type: 'object',
+    description: `The payload object is used to pass additional information that 
+    could be used to render the template, or perform routing rules based on it. 
+      For In-App channel, payload data are also available in <Inbox />`,
+    required: true,
+    additionalProperties: true,
   })
   @IsObject()
-  payload: Record<string, unknown>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  payload: Record<string, unknown>;
 
   @ApiPropertyOptional({
     description: 'This could be used to override provider specific configurations',
@@ -36,10 +40,16 @@ export class TriggerEventToAllRequestDto {
         },
       },
     },
+    type: TriggerOverrides,
+    additionalProperties: {
+      type: 'object',
+      additionalProperties: true,
+    },
+    required: false,
   })
   @IsObject()
   @IsOptional()
-  overrides?: Record<string, Record<string, unknown>>;
+  overrides?: TriggerOverrides;
 
   @ApiProperty({
     description: 'A unique identifier for this transaction, we will generated a UUID if not provided.',
@@ -77,4 +87,9 @@ export class TriggerEventToAllRequestDto {
   @ValidateNested()
   @Type(() => TenantPayloadDto)
   tenant?: TriggerTenantContext;
+
+  @ApiContextPayload()
+  @IsOptional()
+  @IsValidContextPayload({ maxCount: 5 })
+  context?: ContextPayload;
 }

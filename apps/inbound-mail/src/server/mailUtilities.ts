@@ -1,21 +1,26 @@
-import * as child_process from 'child_process';
-import * as shell from 'shelljs';
+import child_process from 'node:child_process';
+import path from 'node:path';
+import shell from 'shelljs';
+import Spamc from 'spamc';
 import logger from './logger';
-import * as path from 'path';
-import * as Spamc from 'spamc';
+
+const LOG_CONTEXT = 'MailUtilities';
 
 const spamc = new Spamc();
 
 /* Verify Python availability. */
 const isPythonAvailable = shell.which('python');
 if (!isPythonAvailable) {
-  logger.warn('Python is not available. Dkim and spf checking is disabled.');
+  logger.warn({ context: LOG_CONTEXT }, 'Python is not available. Dkim and spf checking is disabled.');
 }
 
 /* Verify spamc/spamassassin availability. */
 let isSpamcAvailable = true;
 if (!shell.which('spamassassin') || !shell.which('spamc')) {
-  logger.warn('Either spamassassin or spamc are not available. Spam score computation is disabled.');
+  logger.warn(
+    { context: LOG_CONTEXT },
+    'Either spamassassin or spamc are not available. Spam score computation is disabled.'
+  );
   isSpamcAvailable = false;
 }
 
@@ -25,7 +30,7 @@ if (!shell.which('spamassassin') || !shell.which('spamc')) {
  */
 module.exports = {
   /* @param rawEmail is the full raw mime email as a string. */
-  validateDkim: function (rawEmail, callback) {
+  validateDkim(rawEmail, callback) {
     if (!isPythonAvailable) {
       return callback(null, false);
     }
@@ -33,22 +38,22 @@ module.exports = {
     const verifyDkimPath = path.join(__dirname, '../python/verifydkim.py');
     const verifyDkim = child_process.spawn('python', [verifyDkimPath]);
 
-    verifyDkim.stdout.on('data', function (data) {
-      logger.verbose(data.toString());
+    verifyDkim.stdout.on('data', (data) => {
+      logger.verbose({ context: LOG_CONTEXT }, data.toString());
     });
 
-    verifyDkim.on('close', function (code) {
-      logger.verbose('closed with return code ' + code);
+    verifyDkim.on('close', (code) => {
+      logger.verbose({ context: LOG_CONTEXT }, `closed with return code ${code}`);
 
       /* Convert return code to appropriate boolean. */
-      return callback(null, !!!code);
+      return callback(null, !code);
     });
 
     verifyDkim.stdin.write(rawEmail);
     verifyDkim.stdin.end();
   },
 
-  validateSpf: function (ip, address, host, callback) {
+  validateSpf(ip, address, host, callback) {
     if (!isPythonAvailable) {
       return callback(null, false);
     }
@@ -57,30 +62,33 @@ module.exports = {
     const cmd = 'python ';
     const args = [verifySpfPath, ip, address, host];
 
-    child_process.execFile(cmd, args, function (err, stdout) {
-      logger.verbose(stdout);
+    child_process.execFile(cmd, args, (err, stdout) => {
+      logger.verbose({ context: LOG_CONTEXT }, stdout);
       let code = 0;
       if (err) {
         code = err.code;
       }
 
-      logger.verbose('closed with return code ' + code);
+      logger.verbose({ context: LOG_CONTEXT }, `closed with return code ${code}`);
 
       /* Convert return code to appropriate boolean. */
-      return callback(null, !!!code);
+      return callback(null, !code);
     });
   },
 
   /* @param rawEmail is the full raw mime email as a string. */
-  computeSpamScore: function (rawEmail, callback) {
+  computeSpamScore(rawEmail, callback) {
     if (!isSpamcAvailable) {
       return callback(null, 0.0);
     }
 
-    spamc.report(rawEmail, function (err, result) {
-      logger.verbose(result);
-      if (err) logger.error(err);
-      if (err) return callback(new Error('Unable to compute spam score.'));
+    spamc.report(rawEmail, (err, result) => {
+      logger.verbose({ context: LOG_CONTEXT, result }, 'spamc report');
+      if (err) {
+        logger.error({ err, context: LOG_CONTEXT }, 'spamc reported an error');
+
+        return callback(new Error('Unable to compute spam score.'));
+      }
       callback(null, result.spamScore);
     });
   },

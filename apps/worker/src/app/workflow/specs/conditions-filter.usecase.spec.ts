@@ -1,21 +1,21 @@
-import { expect } from 'chai';
-import * as sinon from 'sinon';
-import axios from 'axios';
-import { Duration, sub } from 'date-fns';
+import { CompileTemplate, ConditionsFilter, ConditionsFilterCommand } from '@novu/application-generic';
+import { JobEntity, MessageTemplateEntity, NotificationStepEntity } from '@novu/dal';
 import {
   BuilderGroupValues,
+  FILTER_TO_LABEL,
   FieldLogicalOperatorEnum,
   FieldOperatorEnum,
   FilterParts,
   FilterPartTypeEnum,
-  FILTER_TO_LABEL,
   StepTypeEnum,
   TimeOperatorEnum,
 } from '@novu/shared';
-import { JobEntity, MessageTemplateEntity, NotificationStepEntity } from '@novu/dal';
-import { CompileTemplate, ConditionsFilter, ConditionsFilterCommand } from '@novu/application-generic';
+import axios from 'axios';
+import { expect } from 'chai';
+import { Duration, sub } from 'date-fns';
+import sinon from 'sinon';
 
-describe('Message filter matcher', function () {
+describe('Message filter matcher', () => {
   const executionLogQueueService = {
     add: sinon.stub(),
   };
@@ -24,13 +24,11 @@ describe('Message filter matcher', function () {
     undefined as any,
     undefined as any,
     undefined as any,
-    undefined as any,
-    undefined as any,
     executionLogQueueService as any,
     new CompileTemplate()
   );
 
-  it('should filter correct message by the filter value', async function () {
+  it('should filter correct message by the filter value', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.OR, [
@@ -52,7 +50,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should filter correct message by the filter variable value', async function () {
+  it('should filter correct message by the filter variable value', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.OR, [
@@ -75,7 +73,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should match a message for AND filter group', async function () {
+  it('should match a message for AND filter group', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -104,7 +102,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should not match AND group for single bad item', async function () {
+  it('should not match AND group for single bad item', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Title', FieldLogicalOperatorEnum.AND, [
@@ -133,7 +131,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(false);
   });
 
-  it('should match a NOT_EQUAL for EQUAL var', async function () {
+  it('should match a NOT_EQUAL for EQUAL var', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -162,7 +160,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should match a EQUAL for a boolean var', async function () {
+  it('should match a EQUAL for a boolean var', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -184,7 +182,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should fall thru for no filters item', async function () {
+  it('should fall thru for no filters item', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match 2', FieldLogicalOperatorEnum.OR, []),
@@ -200,7 +198,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should get larger payload var then filter value', async function () {
+  it('should get larger payload var then filter value', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -222,7 +220,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should get smaller payload var then filter value', async function () {
+  it('should get smaller payload var then filter value', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -244,7 +242,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should get larger or equal payload var then filter value', async function () {
+  it('should get larger or equal payload var then filter value', async () => {
     let matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -285,7 +283,7 @@ describe('Message filter matcher', function () {
 
     expect(matchedMessage.passed).to.equal(true);
   });
-  it('should check if value is defined in payload', async function () {
+  it('should check if value is defined in payload', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -307,7 +305,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should check if key is defined or not in subscriber data', async function () {
+  it('should check if key is defined or not in subscriber data', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -341,7 +339,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(false);
   });
 
-  it('should get nested custom subscriber data', async function () {
+  it('should get nested custom subscriber data', async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.OR, [
@@ -375,7 +373,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it("should return false with nested data that doesn't exist", async function () {
+  it("should return false with nested data that doesn't exist", async () => {
     const matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.OR, [
@@ -401,7 +399,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(false);
   });
 
-  it('should get smaller or equal payload var then filter value', async function () {
+  it('should get smaller or equal payload var then filter value', async () => {
     let matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: makeStep('Correct Match', FieldLogicalOperatorEnum.AND, [
@@ -443,7 +441,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should handle now filters', async function () {
+  it('should handle now filters', async () => {
     let matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
         step: {
@@ -557,7 +555,7 @@ describe('Message filter matcher', function () {
     expect(matchedMessage.passed).to.equal(true);
   });
 
-  it('should handle webhook filter', async function () {
+  it('should handle webhook filter', async () => {
     const gotGetStub = sinon.stub(axios, 'post').resolves(
       Promise.resolve({
         data: { varField: true },
@@ -584,7 +582,7 @@ describe('Message filter matcher', function () {
     gotGetStub.restore();
   });
 
-  it('should skip async filter if child under OR returned true', async function () {
+  it('should skip async filter if child under OR returned true', async () => {
     const gotGetStub = sinon.stub(axios, 'post').resolves(
       Promise.resolve({
         body: '{"varField":true}',
@@ -617,7 +615,7 @@ describe('Message filter matcher', function () {
     expect(requestsCount).to.equal(0);
     expect(matchedMessage.passed).to.equal(true);
 
-    //Reorder children order to make sure it is not random
+    // Reorder children order to make sure it is not random
 
     matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
@@ -648,7 +646,7 @@ describe('Message filter matcher', function () {
     gotGetStub.restore();
   });
 
-  it('should skip async filter if child under AND returned false', async function () {
+  it('should skip async filter if child under AND returned false', async () => {
     const gotGetStub = sinon.stub(axios, 'post').resolves(
       Promise.resolve({
         body: '{"varField":true}',
@@ -681,7 +679,7 @@ describe('Message filter matcher', function () {
     expect(requestsCount).to.equal(0);
     expect(matchedMessage.passed).to.equal(false);
 
-    //Reorder children order to make sure it is not random
+    // Reorder children order to make sure it is not random
 
     matchedMessage = await conditionsFilter.filter(
       mapConditionsFilterCommand({
@@ -730,8 +728,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -768,8 +764,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -800,8 +794,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -826,8 +818,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -849,8 +839,6 @@ describe('Message filter matcher', function () {
       it("doesn't allow to process if the subscriber is not online", async () => {
         const filter = new ConditionsFilter(
           { findOne: () => Promise.resolve(getSubscriber({ isOnline: false })) } as any,
-          undefined as any,
-          undefined as any,
           undefined as any,
           undefined as any,
           undefined as any,
@@ -879,8 +867,6 @@ describe('Message filter matcher', function () {
           {
             findOne: () => Promise.resolve(getSubscriber({ isOnline: true }, { subDuration: { minutes: 3 } })),
           } as any,
-          undefined as any,
-          undefined as any,
           undefined as any,
           undefined as any,
           undefined as any,
@@ -921,8 +907,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -947,8 +931,6 @@ describe('Message filter matcher', function () {
           {
             findOne: () => Promise.resolve(getSubscriber({ isOnline: true }, { subDuration: { minutes: 10 } })),
           } as any,
-          undefined as any,
-          undefined as any,
           undefined as any,
           undefined as any,
           undefined as any,
@@ -979,8 +961,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -1005,8 +985,6 @@ describe('Message filter matcher', function () {
           {
             findOne: () => Promise.resolve(getSubscriber({ isOnline: false }, { subDuration: { minutes: 6 } })),
           } as any,
-          undefined as any,
-          undefined as any,
           undefined as any,
           undefined as any,
           undefined as any,
@@ -1037,8 +1015,6 @@ describe('Message filter matcher', function () {
           undefined as any,
           undefined as any,
           undefined as any,
-          undefined as any,
-          undefined as any,
           executionLogQueueService as any,
           new CompileTemplate()
         );
@@ -1063,8 +1039,6 @@ describe('Message filter matcher', function () {
           {
             findOne: () => Promise.resolve(getSubscriber({ isOnline: false }, { subDuration: { hours: 23 } })),
           } as any,
-          undefined as any,
-          undefined as any,
           undefined as any,
           undefined as any,
           undefined as any,

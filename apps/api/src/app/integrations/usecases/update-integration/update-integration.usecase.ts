@@ -1,26 +1,22 @@
-import { BadRequestException, Injectable, NotFoundException, Inject, Logger, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { AnalyticsService, encryptCredentials, PinoLogger } from '@novu/application-generic';
 import { IntegrationEntity, IntegrationRepository } from '@novu/dal';
-import {
-  AnalyticsService,
-  encryptCredentials,
-  buildIntegrationKey,
-  InvalidateCacheService,
-} from '@novu/application-generic';
 import { CHANNELS_WITH_PRIMARY } from '@novu/shared';
-
-import { UpdateIntegrationCommand } from './update-integration.command';
-import { CheckIntegration } from '../check-integration/check-integration.usecase';
 import { CheckIntegrationCommand } from '../check-integration/check-integration.command';
+import { CheckIntegration } from '../check-integration/check-integration.usecase';
+import { UpdateIntegrationCommand } from './update-integration.command';
 
 @Injectable()
 export class UpdateIntegration {
   @Inject()
   private checkIntegration: CheckIntegration;
   constructor(
-    private invalidateCache: InvalidateCacheService,
     private integrationRepository: IntegrationRepository,
-    private analyticsService: AnalyticsService
-  ) {}
+    private analyticsService: AnalyticsService,
+    private logger: PinoLogger
+  ) {
+    this.logger.setContext(this.constructor.name);
+  }
 
   private async calculatePriorityAndPrimaryForActive({
     existingIntegration,
@@ -94,7 +90,7 @@ export class UpdateIntegration {
   }
 
   async execute(command: UpdateIntegrationCommand): Promise<IntegrationEntity> {
-    Logger.verbose('Executing Update Integration Command');
+    this.logger.trace('Executing Update Integration Command');
 
     const existingIntegration = await this.integrationRepository.findOne({
       _id: command.integrationId,
@@ -121,12 +117,6 @@ export class UpdateIntegration {
       channel: existingIntegration.channel,
       _organization: command.organizationId,
       active: command.active,
-    });
-
-    await this.invalidateCache.invalidateQuery({
-      key: buildIntegrationKey().invalidate({
-        _organizationId: command.organizationId,
-      }),
     });
 
     const environmentId = command.environmentId ?? existingIntegration._environmentId;
@@ -165,6 +155,10 @@ export class UpdateIntegration {
 
     if (command.credentials) {
       updatePayload.credentials = encryptCredentials(command.credentials);
+    }
+
+    if (command.configurations) {
+      updatePayload.configurations = command.configurations;
     }
 
     if (command.conditions) {

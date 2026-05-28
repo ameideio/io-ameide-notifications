@@ -1,14 +1,16 @@
 packages:
   # all packages in subdirs of packages/ and components/
-  - 'automation'
   - 'packages/*'
-  # Angular projects - these are nested under the Angular workspace root, and need version bumps during release.
-  - 'packages/notification-center-angular/projects/*'
   - 'apps/*'
   - 'libs/*'
   # exclude packages that are inside test directories
   - '!**/test/**'
   # all packages in enterprise modules
   - 'enterprise/packages/*'
-  - 'enterprise/packages/libs/*'
-  - 'enterprise/packages/echo/*'
+  - 'enterprise/workers/step-resolver'
+  # playground apps
+  - 'playground/*'
+
+# Pnpm configuration
+# Wait 24 hours (1440 minutes) before allowing packages to be installed
+minimumReleaseAge: 1440

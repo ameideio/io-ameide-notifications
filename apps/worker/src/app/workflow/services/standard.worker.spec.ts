@@ -1,11 +1,15 @@
-import { Test } from '@nestjs/testing';
-import { expect } from 'chai';
-import { formatISO } from 'date-fns';
-import { v4 as uuid } from 'uuid';
 import { faker } from '@faker-js/faker';
-import { setTimeout } from 'timers/promises';
-
+import { Test } from '@nestjs/testing';
 import {
+  CloudflareSchedulerService,
+  FeatureFlagsService,
+  PinoLogger,
+  SqsService,
+  StandardQueueService,
+  WorkflowInMemoryProviderService,
+} from '@novu/application-generic';
+import {
+  CommunityOrganizationRepository,
   EnvironmentEntity,
   JobEntity,
   JobRepository,
@@ -21,31 +25,58 @@ import {
 import { StepTypeEnum } from '@novu/shared';
 import {
   EnvironmentService,
+  JobsService,
   NotificationTemplateService,
   OrganizationService,
   SubscribersService,
   UserService,
-  JobsService,
 } from '@novu/testing';
-import { BullMqService, StandardQueueService, WorkflowInMemoryProviderService } from '@novu/application-generic';
-
-import { StandardWorker } from './standard.worker';
-
-import { WorkflowModule } from '../workflow.module';
-import {
-  HandleLastFailedJob,
-  RunJob,
-  SetJobAsCompleted,
-  SetJobAsFailed,
-  WebhookFilterBackoffStrategy,
-} from '../usecases';
+import { expect } from 'chai';
+import { formatISO } from 'date-fns';
+import { setTimeout } from 'timers/promises';
+import { v4 as uuid } from 'uuid';
 import { SharedModule } from '../../shared/shared.module';
+import { HandleLastFailedJob, RunJob, SetJobAsFailed, WebhookFilterBackoffStrategy } from '../usecases';
+import { WorkflowModule } from '../workflow.module';
+import { StandardWorker } from './standard.worker';
 
 let standardQueueService: StandardQueueService;
 let standardWorker: StandardWorker;
 
+const mockCloudflareSchedulerService = {
+  scheduleJob: async () => {},
+  cancelJob: async () => false,
+  isConfigured: () => false,
+} as unknown as CloudflareSchedulerService;
+
+const mockFeatureFlagsService = {
+  getFlag: async () => false,
+} as unknown as FeatureFlagsService;
+
+const mockOrganizationRepository = {
+  findOne: async () => ({ _id: 'mock-org-id', apiServiceLevel: 'free' }),
+} as unknown as CommunityOrganizationRepository;
+
+const mockSqsService = {
+  getQueueUrl: () => undefined,
+  getProducer: () => undefined,
+  getClient: () => ({}) as any,
+  isConfigured: () => false,
+  send: async () => {},
+  sendBulk: async () => {},
+} as unknown as SqsService;
+
+const mockLogger = {
+  setContext: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+} as unknown as PinoLogger;
+
 describe('Standard Worker', () => {
   let jobRepository: JobRepository;
+  let notificationRepository: NotificationRepository;
   let organization: OrganizationEntity;
   let environment: EnvironmentEntity;
   let user: UserEntity;
@@ -62,10 +93,10 @@ describe('Standard Worker', () => {
     process.env.IS_IN_MEMORY_CLUSTER_MODE_ENABLED = 'false';
 
     jobRepository = new JobRepository();
-
+    notificationRepository = new NotificationRepository();
     jobsService = new JobsService();
-
     const userService = new UserService();
+
     const card = {
       firstName: faker.name.firstName(),
       lastName: faker.name.lastName(),
@@ -76,7 +107,7 @@ describe('Standard Worker', () => {
       email: `${card.firstName}_${card.lastName}_${faker.datatype.uuid()}@gmail.com`.toLowerCase(),
       profilePicture: `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 60) + 1}.jpg`,
       tokens: [],
-      password: '123Qwe!@#',
+      password: 'asd#Faf4fd',
       showOnBoarding: true,
     };
 
@@ -98,7 +129,14 @@ describe('Standard Worker', () => {
       WorkflowInMemoryProviderService
     );
 
-    standardQueueService = new StandardQueueService(workflowInMemoryProviderService);
+    standardQueueService = new StandardQueueService(
+      workflowInMemoryProviderService,
+      mockCloudflareSchedulerService,
+      mockFeatureFlagsService,
+      mockOrganizationRepository,
+      mockSqsService,
+      mockLogger
+    );
     await standardQueueService.queue.obliterate();
   });
 
@@ -109,20 +147,25 @@ describe('Standard Worker', () => {
 
     const handleLastFailedJob = moduleRef.get<HandleLastFailedJob>(HandleLastFailedJob);
     const runJob = moduleRef.get<RunJob>(RunJob);
-    const setJobAsCompleted = moduleRef.get<SetJobAsCompleted>(SetJobAsCompleted);
     const setJobAsFailed = moduleRef.get<SetJobAsFailed>(SetJobAsFailed);
     const webhookFilterBackoffStrategy = moduleRef.get<WebhookFilterBackoffStrategy>(WebhookFilterBackoffStrategy);
     const workflowInMemoryProviderService = moduleRef.get<WorkflowInMemoryProviderService>(
       WorkflowInMemoryProviderService
     );
+    const organizationRepository = moduleRef.get<CommunityOrganizationRepository>(CommunityOrganizationRepository);
+    const featureFlagsService = moduleRef.get<FeatureFlagsService>(FeatureFlagsService);
 
     standardWorker = new StandardWorker(
       handleLastFailedJob,
       runJob,
-      setJobAsCompleted,
       setJobAsFailed,
       webhookFilterBackoffStrategy,
-      workflowInMemoryProviderService
+      workflowInMemoryProviderService,
+      organizationRepository,
+      jobRepository,
+      mockSqsService,
+      mockLogger,
+      featureFlagsService
     );
   });
 
@@ -135,8 +178,8 @@ describe('Standard Worker', () => {
     expect(standardWorker).to.be.ok;
 
     expect(standardWorker.DEFAULT_ATTEMPTS).to.eql(3);
-    expect(standardWorker.worker).to.deep.include({
-      _eventsCount: 1,
+    expect(standardWorker.bullMqWorker).to.deep.include({
+      _eventsCount: 2,
       _maxListeners: undefined,
       name: 'standard',
     });
@@ -147,7 +190,7 @@ describe('Standard Worker', () => {
       workerIsPaused: false,
       workerIsRunning: true,
     });
-    expect(standardWorker.worker.opts).to.deep.include({
+    expect(standardWorker.bullMqWorker.opts).to.deep.include({
       concurrency: 200,
       lockDuration: 90000,
     });
@@ -159,7 +202,15 @@ describe('Standard Worker', () => {
 
     const transactionId = uuid();
     const _environmentId = environment._id;
-    const _notificationId = NotificationRepository.createObjectId();
+    const notification = await notificationRepository.create({
+      _environmentId,
+      _organizationId: organization._id,
+      _subscriberId: subscriber._id,
+      _templateId: template._id,
+      _userId: user._id,
+      tags: [],
+    });
+    const _notificationId = notification._id;
     const _organizationId = organization._id;
     const _subscriberId = subscriber._id;
     const _templateId = template._id;
@@ -207,13 +258,12 @@ describe('Standard Worker', () => {
 
     await standardQueueService.add({ name: jobCreated._id, data: jobData, groupId: '0' });
 
-    await jobsService.awaitRunningJobs({
+    await jobsService.waitForJobCompletion({
       templateId: _templateId,
       organizationId: organization._id,
-      delay: false,
     });
 
-    const jobs = await jobRepository.find({ _environmentId, _organizationId });
+    const jobs = await jobRepository.find({ _environmentId, _organizationId, _notificationId });
     expect(jobs.length).to.equal(1);
 
     expect(jobs[0].status).to.eql(JobStatusEnum.COMPLETED);
@@ -270,10 +320,9 @@ describe('Standard Worker', () => {
 
     await standardQueueService.add({ name: jobCreated._id, data: jobData, groupId: '0' });
 
-    await jobsService.awaitRunningJobs({
+    await jobsService.waitForJobCompletion({
       templateId: _templateId,
       organizationId: organization._id,
-      delay: false,
     });
 
     /**
@@ -287,18 +336,19 @@ describe('Standard Worker', () => {
       failedTrigger = await jobRepository.findOne({
         _environmentId,
         _organizationId,
+        _notificationId,
         status: JobStatusEnum.FAILED,
         type: StepTypeEnum.TRIGGER,
       });
     } while (!failedTrigger || !failedTrigger.error);
 
     expect(failedTrigger.error).to.deep.include({
-      message: `Notification template ${_templateId} is not found`,
+      message: `Notification with id ${_notificationId} not found`,
     });
   });
 
   it('should pause the worker', async () => {
-    const isPaused = await standardWorker.worker.isPaused();
+    const isPaused = await standardWorker.bullMqWorker.isPaused();
     expect(isPaused).to.equal(false);
 
     const runningStatus = await standardWorker.bullMqService.getStatus();
@@ -312,7 +362,7 @@ describe('Standard Worker', () => {
 
     await standardWorker.pause();
 
-    const isNowPaused = await standardWorker.worker.isPaused();
+    const isNowPaused = await standardWorker.bullMqWorker.isPaused();
     expect(isNowPaused).to.equal(true);
 
     const runningStatusChanged = await standardWorker.bullMqService.getStatus();
@@ -328,7 +378,7 @@ describe('Standard Worker', () => {
   it('should resume the worker', async () => {
     await standardWorker.pause();
 
-    const isPaused = await standardWorker.worker.isPaused();
+    const isPaused = await standardWorker.bullMqWorker.isPaused();
     expect(isPaused).to.equal(true);
 
     const runningStatus = await standardWorker.bullMqService.getStatus();
@@ -342,7 +392,7 @@ describe('Standard Worker', () => {
 
     await standardWorker.resume();
 
-    const isNowPaused = await standardWorker.worker.isPaused();
+    const isNowPaused = await standardWorker.bullMqWorker.isPaused();
     expect(isNowPaused).to.equal(false);
 
     const runningStatusChanged = await standardWorker.bullMqService.getStatus();

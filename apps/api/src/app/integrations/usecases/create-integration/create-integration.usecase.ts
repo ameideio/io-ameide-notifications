@@ -1,35 +1,32 @@
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
-import * as shortid from 'shortid';
-import slugify from 'slugify';
-import { IntegrationEntity, IntegrationRepository, DalException, IntegrationQuery } from '@novu/dal';
-import {
-  ChannelTypeEnum,
-  EmailProviderIdEnum,
-  providers,
-  SmsProviderIdEnum,
-  InAppProviderIdEnum,
-  CHANNELS_WITH_PRIMARY,
-} from '@novu/shared';
 import {
   AnalyticsService,
-  encryptCredentials,
-  buildIntegrationKey,
-  InvalidateCacheService,
-  areNovuSmsCredentialsSet,
   areNovuEmailCredentialsSet,
+  areNovuSlackCredentialsSet,
+  areNovuSmsCredentialsSet,
+  encryptCredentials,
 } from '@novu/application-generic';
-
-import { CreateIntegrationCommand } from './create-integration.command';
-import { ApiException } from '../../../shared/exceptions/api.exception';
+import { DalException, IntegrationEntity, IntegrationQuery, IntegrationRepository } from '@novu/dal';
+import {
+  CHANNELS_WITH_PRIMARY,
+  ChannelTypeEnum,
+  ChatProviderIdEnum,
+  EmailProviderIdEnum,
+  InAppProviderIdEnum,
+  providers,
+  SmsProviderIdEnum,
+  slugify,
+} from '@novu/shared';
+import shortid from 'shortid';
 import { CheckIntegrationCommand } from '../check-integration/check-integration.command';
 import { CheckIntegration } from '../check-integration/check-integration.usecase';
+import { CreateIntegrationCommand } from './create-integration.command';
 
 @Injectable()
 export class CreateIntegration {
   @Inject()
   private checkIntegration: CheckIntegration;
   constructor(
-    private invalidateCache: InvalidateCacheService,
     private integrationRepository: IntegrationRepository,
     private analyticsService: AnalyticsService
   ) {}
@@ -62,6 +59,7 @@ export class CreateIntegration {
       );
     } else {
       result.priority = highestPriorityIntegration ? highestPriorityIntegration.priority + 1 : 1;
+      result.primary = true;
     }
 
     return result;
@@ -84,7 +82,8 @@ export class CreateIntegration {
 
     if (
       (command.providerId === SmsProviderIdEnum.Novu && !areNovuSmsCredentialsSet()) ||
-      (command.providerId === EmailProviderIdEnum.Novu && !areNovuEmailCredentialsSet())
+      (command.providerId === EmailProviderIdEnum.Novu && !areNovuEmailCredentialsSet()) ||
+      (command.providerId === ChatProviderIdEnum.Novu && !areNovuSlackCredentialsSet())
     ) {
       throw new BadRequestException(`Creating Novu integration for ${command.providerId} provider is not allowed`);
     }
@@ -106,6 +105,7 @@ export class CreateIntegration {
     if (command.identifier) {
       const existingIntegrationWithIdentifier = await this.integrationRepository.findOne({
         _organizationId: command.organizationId,
+        _environmentId: command.environmentId,
         identifier: command.identifier,
       });
 
@@ -137,17 +137,11 @@ export class CreateIntegration {
         );
       }
 
-      await this.invalidateCache.invalidateQuery({
-        key: buildIntegrationKey().invalidate({
-          _organizationId: command.organizationId,
-        }),
-      });
-
       const providerIdCapitalized = `${command.providerId.charAt(0).toUpperCase()}${command.providerId.slice(1)}`;
       const defaultName =
         providers.find((provider) => provider.id === command.providerId)?.displayName ?? providerIdCapitalized;
       const name = command.name ?? defaultName;
-      const identifier = command.identifier ?? `${slugify(name, { lower: true, strict: true })}-${shortid.generate()}`;
+      const identifier = command.identifier ?? `${slugify(name)}-${shortid.generate()}`;
 
       const query: IntegrationQuery = {
         name,
@@ -159,6 +153,7 @@ export class CreateIntegration {
         credentials: encryptCredentials(command.credentials ?? {}),
         active: command.active,
         conditions: command.conditions,
+        configurations: command.configurations,
       };
 
       const isActiveAndChannelSupportsPrimary = command.active && CHANNELS_WITH_PRIMARY.includes(command.channel);
@@ -175,7 +170,7 @@ export class CreateIntegration {
       return integrationEntity;
     } catch (e) {
       if (e instanceof DalException) {
-        throw new ApiException(e.message);
+        throw new BadRequestException(e.message);
       }
       throw e;
     }
