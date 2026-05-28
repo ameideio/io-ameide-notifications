@@ -1,4 +1,6 @@
+import { encryptApiKey } from '@novu/application-generic';
 import { expect } from 'chai';
+import sinon from 'sinon';
 import { OidcService } from '../services/oidc.service';
 
 describe('OidcService', () => {
@@ -79,6 +81,98 @@ describe('OidcService', () => {
       expect(profile.name).to.equal('lone@x.io');
       expect(profile.id).to.equal('kc-3');
       expect(profile.login).to.equal('lone@x.io');
+    });
+  });
+
+  describe('mintBootstrapContext', () => {
+    const originalEnv = { ...process.env };
+
+    afterEach(() => {
+      process.env = { ...originalEnv };
+      sinon.restore();
+    });
+
+    it('creates the bootstrap organization and returns the production API key', async () => {
+      process.env.IS_OIDC_ENABLED = 'true';
+      process.env.OIDC_ISSUER = 'https://auth.example/realms/ameide';
+      process.env.OIDC_BOOTSTRAP_CLIENT_ID = 'notifications-bootstrap';
+      process.env.OIDC_BOOTSTRAP_CLIENT_SECRET = 'secret';
+      process.env.OIDC_BOOTSTRAP_USER_EMAIL = 'notifications-bootstrap@ameide.internal';
+      process.env.OIDC_BOOTSTRAP_ORGANIZATION_NAME = 'Ameide Notifications';
+      process.env.STORE_ENCRYPTION_KEY = '12345678901234567890123456789012';
+
+      const user = { _id: 'user-1' };
+      const org = { _id: 'org-1' };
+      const dev = { _id: 'env-dev', name: 'Development', identifier: 'dev-ident' };
+      const prod = { _id: 'env-prod', name: 'Production', identifier: 'prod-ident' };
+      const userRepository = { findByEmail: sinon.stub().resolves(user) };
+      const organizationRepository = {
+        findUserActiveOrganizations: sinon.stub(),
+      };
+      organizationRepository.findUserActiveOrganizations.onFirstCall().resolves([]);
+      organizationRepository.findUserActiveOrganizations.onSecondCall().resolves([org]);
+      organizationRepository.findUserActiveOrganizations.onThirdCall().resolves([org]);
+      const environmentRepository = {
+        findOrganizationEnvironments: sinon.stub().resolves([dev, prod]),
+        getApiKeys: sinon.stub().resolves([{ key: encryptApiKey('production-api-key') }]),
+      };
+      const authService = { authenticate: sinon.stub().resolves({ newUser: true, token: 'unused' }) };
+      const createOrganization = { execute: sinon.stub().resolves(org) };
+      const addMember = { execute: sinon.stub() };
+      const logger = { setContext: sinon.stub(), warn: sinon.stub() };
+      const service = new OidcService(
+        userRepository as any,
+        organizationRepository as any,
+        environmentRepository as any,
+        authService as any,
+        createOrganization as any,
+        addMember as any,
+        logger as any
+      );
+      sinon.stub(service as any, 'assertClientCredentialsGrant').resolves();
+
+      const result = await service.mintBootstrapContext({
+        clientId: 'notifications-bootstrap',
+        clientSecret: 'secret',
+        grantType: 'client_credentials',
+      });
+
+      expect(result).to.deep.equal({
+        apiKey: 'production-api-key',
+        applicationIdentifier: 'prod-ident',
+        environmentId: 'env-prod',
+        environmentName: 'Production',
+        organizationId: 'org-1',
+      });
+      expect(createOrganization.execute.calledOnce).to.equal(true);
+      expect(environmentRepository.getApiKeys.calledWith('env-prod')).to.equal(true);
+    });
+
+    it('rejects credentials that do not match the configured bootstrap client', async () => {
+      process.env.IS_OIDC_ENABLED = 'true';
+      process.env.OIDC_BOOTSTRAP_CLIENT_ID = 'notifications-bootstrap';
+      process.env.OIDC_BOOTSTRAP_CLIENT_SECRET = 'secret';
+
+      const service = new OidcService(
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        { setContext: sinon.stub() } as any
+      );
+
+      try {
+        await service.mintBootstrapContext({
+          clientId: 'notifications-bootstrap',
+          clientSecret: 'wrong',
+          grantType: 'client_credentials',
+        });
+        throw new Error('expected mintBootstrapContext to reject');
+      } catch (err) {
+        expect((err as Error).message).to.equal('Invalid bootstrap client credentials');
+      }
     });
   });
 });

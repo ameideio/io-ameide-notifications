@@ -1,8 +1,8 @@
-import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
-import { PinoLogger } from '@novu/application-generic';
-import { OrganizationRepository, UserRepository } from '@novu/dal';
-import { AuthProviderEnum, MemberRoleEnum, normalizeEmail } from '@novu/shared';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
+import { BadRequestException, Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { decryptApiKey, PinoLogger } from '@novu/application-generic';
+import { EnvironmentRepository, OrganizationRepository, UserRepository } from '@novu/dal';
+import { AuthProviderEnum, EnvironmentEnum, MemberRoleEnum, normalizeEmail } from '@novu/shared';
 import { CreateOrganizationCommand } from '../../organization/usecases/create-organization/create-organization.command';
 import { CreateOrganization } from '../../organization/usecases/create-organization/create-organization.usecase';
 import { AddMemberCommand } from '../../organization/usecases/membership/add-member/add-member.command';
@@ -28,6 +28,20 @@ export interface IOidcCallbackResult {
   newUser: boolean;
 }
 
+export interface IOidcBootstrapRequest {
+  clientId: string;
+  clientSecret: string;
+  grantType: string;
+}
+
+export interface IOidcBootstrapResult {
+  apiKey: string;
+  applicationIdentifier: string;
+  environmentId: string;
+  environmentName: string;
+  organizationId: string;
+}
+
 const DEFAULT_OIDC_PROVIDER_NAME = 'OIDC';
 const DEFAULT_OIDC_SCOPES = 'openid profile email groups';
 const STATE_TTL_MS = 5 * 60 * 1000;
@@ -47,6 +61,7 @@ export class OidcService implements OnModuleInit {
   constructor(
     private readonly userRepository: UserRepository,
     private readonly organizationRepository: OrganizationRepository,
+    private readonly environmentRepository: EnvironmentRepository,
     private readonly authService: AuthService,
     private readonly createOrganization: CreateOrganization,
     private readonly addMember: AddMember,
@@ -194,11 +209,104 @@ export class OidcService implements OnModuleInit {
     return result;
   }
 
+  async mintBootstrapContext(body: IOidcBootstrapRequest): Promise<IOidcBootstrapResult> {
+    if (!OidcService.isEnabled()) {
+      throw new BadRequestException('OIDC is not enabled');
+    }
+    if (body.grantType !== 'client_credentials') {
+      throw new BadRequestException('grantType must be client_credentials');
+    }
+
+    const expectedClientId = this.getRequiredEnv('OIDC_BOOTSTRAP_CLIENT_ID');
+    const expectedClientSecret = this.getRequiredEnv('OIDC_BOOTSTRAP_CLIENT_SECRET');
+    if (
+      !this.safeEquals(body.clientId, expectedClientId) ||
+      !this.safeEquals(body.clientSecret, expectedClientSecret)
+    ) {
+      throw new UnauthorizedException('Invalid bootstrap client credentials');
+    }
+
+    await this.assertClientCredentialsGrant(body.clientId, body.clientSecret);
+
+    const email = normalizeEmail(this.getRequiredEnv('OIDC_BOOTSTRAP_USER_EMAIL'));
+    const organizationName = this.getRequiredEnv('OIDC_BOOTSTRAP_ORGANIZATION_NAME');
+    const profile = {
+      id: `client:${body.clientId}`,
+      login: email,
+      email,
+      name: organizationName,
+      avatar_url: '',
+    };
+
+    const result = await this.authService.authenticate(AuthProviderEnum.OIDC, '', '', profile, profile.id);
+    if (result.newUser) {
+      await this.ensureUserHasOrganization(email, organizationName);
+    }
+
+    const user = await this.userRepository.findByEmail(email);
+    if (!user) {
+      throw new BadRequestException('Bootstrap user was not created');
+    }
+
+    let organizations = await this.organizationRepository.findUserActiveOrganizations(user._id);
+    if (!organizations || organizations.length === 0) {
+      await this.ensureUserHasOrganization(email, organizationName);
+      organizations = await this.organizationRepository.findUserActiveOrganizations(user._id);
+    }
+    const organization = organizations?.[0];
+    if (!organization) {
+      throw new BadRequestException('Bootstrap organization was not created');
+    }
+
+    const environments = await this.environmentRepository.findOrganizationEnvironments(organization._id);
+    const environment =
+      environments.find((candidate) => candidate.name === EnvironmentEnum.PRODUCTION) ||
+      environments.find((candidate) => candidate.name === EnvironmentEnum.DEVELOPMENT) ||
+      environments[0];
+    if (!environment) {
+      throw new BadRequestException('Bootstrap organization has no environment');
+    }
+
+    const apiKeys = await this.environmentRepository.getApiKeys(environment._id);
+    const apiKey = apiKeys[0]?.key ? decryptApiKey(apiKeys[0].key) : '';
+    if (!apiKey) {
+      throw new BadRequestException(`Bootstrap environment ${environment._id} has no API key`);
+    }
+
+    return {
+      apiKey,
+      applicationIdentifier: environment.identifier,
+      environmentId: environment._id,
+      environmentName: environment.name,
+      organizationId: organization._id,
+    };
+  }
+
+  private async assertClientCredentialsGrant(clientId: string, clientSecret: string): Promise<void> {
+    const { Issuer } = await import('openid-client');
+    const issuer = await Issuer.discover(this.getRequiredEnv('OIDC_ISSUER'));
+    const client = new issuer.Client({
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    await client.grant({
+      grant_type: 'client_credentials',
+      scope: 'openid',
+    });
+  }
+
+  private safeEquals(a: string, b: string): boolean {
+    const left = Buffer.from(a || '');
+    const right = Buffer.from(b || '');
+    if (left.length !== right.length) return false;
+
+    return crypto.timingSafeEqual(left, right);
+  }
+
   private toNovuProfile(userinfo: IOidcUserProfile) {
     const fullName =
-      userinfo.name ||
-      [userinfo.given_name, userinfo.family_name].filter(Boolean).join(' ').trim() ||
-      userinfo.email;
+      userinfo.name || [userinfo.given_name, userinfo.family_name].filter(Boolean).join(' ').trim() || userinfo.email;
 
     return {
       id: userinfo.sub,

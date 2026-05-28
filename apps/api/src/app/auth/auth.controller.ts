@@ -128,6 +128,16 @@ export class AuthController {
     }
   }
 
+  @Post('/oidc/bootstrap')
+  @Header('Cache-Control', 'no-store')
+  async oidcBootstrap(@Body() body: { clientId?: string; clientSecret?: string; grantType?: string }) {
+    return await this.oidcService.mintBootstrapContext({
+      clientId: body.clientId || '',
+      clientSecret: body.clientSecret || '',
+      grantType: body.grantType || '',
+    });
+  }
+
   @Get('/refresh')
   @RequireAuthentication()
   @Header('Cache-Control', 'no-store')
