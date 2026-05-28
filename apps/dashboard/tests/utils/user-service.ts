@@ -1,5 +1,6 @@
 import { ClerkClient } from '@clerk/backend';
 import { CommunityUserRepository } from '@novu/dal';
+// nx-ignore-next-line: test utility only; dashboard production build does not depend on EE auth.
 import { EEUserRepository } from '@novu/ee-auth';
 import { NewDashboardOptInStatusEnum } from '@novu/shared';
 

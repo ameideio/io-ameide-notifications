@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ChangeRepository, LayoutRepository, MessageTemplateRepository } from '@novu/dal';
 import { EmailBlockTypeEnum, ResourceTypeEnum, StepTypeEnum, TemplateVariableTypeEnum } from '@novu/shared';
+// nx-ignore-next-line: spec-only helper; application-generic production build does not depend on testing.
 import { UserSession } from '@novu/testing';
 import { expect } from 'chai';
 import { CreateChange } from '../../create-change';

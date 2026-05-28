@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ExecutionDetailsRepository } from '@novu/dal';
 import { ExecutionDetailsSourceEnum, ExecutionDetailsStatusEnum, StepTypeEnum } from '@novu/shared';
+// nx-ignore-next-line: spec-only helper; application-generic production build does not depend on testing.
 import { UserSession } from '@novu/testing';
 import { CreateExecutionDetailsCommand } from './create-execution-details.command';
 import { CreateExecutionDetails } from './create-execution-details.usecase';

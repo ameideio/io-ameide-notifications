@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { SubscriberRepository } from '@novu/dal';
+// nx-ignore-next-line: spec-only helper; application-generic production build does not depend on testing.
 import { SubscribersService, UserSession } from '@novu/testing';
 import {
   CacheInMemoryProviderService,
