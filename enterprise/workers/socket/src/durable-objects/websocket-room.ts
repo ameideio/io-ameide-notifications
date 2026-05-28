@@ -195,9 +195,7 @@ export class WebSocketRoom extends DurableObject<IEnv> {
     const apiUrl = this.env.API_URL;
 
     if (!apiUrl) {
-      console.warn('API_URL not configured, skipping online state notification');
-
-      return;
+      throw new Error('API_URL is required for subscriber online state notification');
     }
 
     if (!jwtToken) {

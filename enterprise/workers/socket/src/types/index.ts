@@ -2,7 +2,7 @@ export interface IEnv {
   WEBSOCKET_ROOM: DurableObjectNamespace;
   JWT_SECRET: string;
   INTERNAL_API_KEY: string;
-  API_URL?: string;
+  API_URL: string;
   REGION?: string;
 }
 
