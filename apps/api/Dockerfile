@@ -87,6 +87,4 @@ RUN if [ -f dist/metadata.js ]; then \
         dist/metadata.js; \
     fi
 
-ENV NEW_RELIC_NO_CONFIG_FILE=true
-
 ENTRYPOINT [ "sh", "-c", "node dist/dotenvcreate.mjs -s=$SECRET_NAME -r=$NOVU_REGION -e=$NOVU_ENTERPRISE -v=$NODE_ENV -h=$IS_SELF_HOSTED && pm2-runtime start dist/main.js -i max" ]
