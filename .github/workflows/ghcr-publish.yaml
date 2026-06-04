@@ -42,7 +42,7 @@ env:
 
 jobs:
   setup_matrix:
-    runs-on: ${{ vars.AMEIDE_RUNS_ON }}
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -77,7 +77,7 @@ jobs:
   build_and_publish:
     needs: setup_matrix
     name: Build ${{ matrix.service }}
-    runs-on: ${{ vars.AMEIDE_DIND_RUNS_ON }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
