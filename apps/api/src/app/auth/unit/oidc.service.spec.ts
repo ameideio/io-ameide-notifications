@@ -84,6 +84,61 @@ describe('OidcService', () => {
     });
   });
 
+  describe('OIDC backchannel metadata rewrite', () => {
+    const rewrite = (metadata: Record<string, unknown>, backchannelBaseUrl: string) => {
+      // @ts-expect-error - access private for focused contract test
+      return OidcService.prototype.rewriteBackchannelMetadata.call(
+        Object.create(OidcService.prototype),
+        metadata,
+        backchannelBaseUrl
+      );
+    };
+
+    it('rewrites backend endpoints to the required Keycloak backchannel base URL', () => {
+      const metadata = rewrite(
+        {
+          issuer: 'https://auth.example/realms/ameide',
+          authorization_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/auth',
+          end_session_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/logout',
+          token_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/token',
+          jwks_uri: 'https://auth.example/realms/ameide/protocol/openid-connect/certs',
+          userinfo_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/userinfo',
+          introspection_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/token/introspect',
+          revocation_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/revoke',
+        },
+        'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide'
+      );
+
+      expect(metadata).to.include({
+        issuer: 'https://auth.example/realms/ameide',
+        authorization_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/auth',
+        end_session_endpoint: 'https://auth.example/realms/ameide/protocol/openid-connect/logout',
+        token_endpoint:
+          'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide/protocol/openid-connect/token',
+        jwks_uri:
+          'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide/protocol/openid-connect/certs',
+        userinfo_endpoint:
+          'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide/protocol/openid-connect/userinfo',
+        introspection_endpoint:
+          'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide/protocol/openid-connect/token/introspect',
+        revocation_endpoint:
+          'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide/protocol/openid-connect/revoke',
+      });
+    });
+
+    it('preserves endpoints outside the configured issuer', () => {
+      const metadata = rewrite(
+        {
+          issuer: 'https://auth.example/realms/ameide',
+          token_endpoint: 'https://token.example/oauth/token',
+        },
+        'http://keycloak.keycloak-instance.svc.cluster.local:8080/realms/ameide/'
+      );
+
+      expect(metadata.token_endpoint).to.equal('https://token.example/oauth/token');
+    });
+  });
+
   describe('mintBootstrapContext', () => {
     const originalEnv = { ...process.env };
 
