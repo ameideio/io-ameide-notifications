@@ -3,7 +3,7 @@ name: Publish Ameide GHCR Images
 on:
   push:
     branches:
-      - next
+      - main
   workflow_dispatch:
     inputs:
       build_api:
