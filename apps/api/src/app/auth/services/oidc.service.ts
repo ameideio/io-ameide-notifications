@@ -47,11 +47,42 @@ const DEFAULT_OIDC_SCOPES = 'openid profile email groups';
 const STATE_TTL_MS = 5 * 60 * 1000;
 
 interface CachedClient {
-  // The dynamically imported openid-client `Client` instance. Loosely typed to
-  // avoid leaking ESM-only types into our CommonJS build surface.
-  client: any;
+  client: OidcClient;
   fetchedAt: number;
 }
+
+type OidcMetadata = Record<string, unknown>;
+
+interface OidcTokenSet {
+  access_token?: string;
+  refresh_token?: string;
+}
+
+interface OidcClient {
+  authorizationUrl(params: Record<string, string>): string;
+  callbackParams(input: unknown): Record<string, unknown>;
+  callback(redirectUri: string, params: Record<string, unknown>, checks: { state: string }): Promise<OidcTokenSet>;
+  userinfo(accessToken: string): Promise<IOidcUserProfile>;
+  grant(params: Record<string, string>): Promise<unknown>;
+}
+
+interface OidcIssuer {
+  metadata: OidcMetadata;
+  Client: new (config: Record<string, unknown>) => OidcClient;
+}
+
+interface OidcIssuerConstructor {
+  discover(issuerUrl: string): Promise<OidcIssuer>;
+  new (metadata: OidcMetadata): OidcIssuer;
+}
+
+const BACKCHANNEL_ENDPOINTS = [
+  'token_endpoint',
+  'jwks_uri',
+  'userinfo_endpoint',
+  'introspection_endpoint',
+  'revocation_endpoint',
+];
 
 @Injectable()
 export class OidcService implements OnModuleInit {
@@ -112,7 +143,7 @@ export class OidcService implements OnModuleInit {
       const clientSecret = this.getRequiredEnv('OIDC_CLIENT_SECRET');
       const redirectUri = this.getRequiredEnv('OIDC_REDIRECT_URI');
 
-      const issuer = await Issuer.discover(issuerUrl);
+      const issuer = await this.discoverIssuer(Issuer, issuerUrl);
       const client = new issuer.Client({
         client_id: clientId,
         client_secret: clientSecret,
@@ -284,7 +315,7 @@ export class OidcService implements OnModuleInit {
 
   private async assertClientCredentialsGrant(clientId: string, clientSecret: string): Promise<void> {
     const { Issuer } = await import('openid-client');
-    const issuer = await Issuer.discover(this.getRequiredEnv('OIDC_ISSUER'));
+    const issuer = await this.discoverIssuer(Issuer, this.getRequiredEnv('OIDC_ISSUER'));
     const client = new issuer.Client({
       client_id: clientId,
       client_secret: clientSecret,
@@ -294,6 +325,66 @@ export class OidcService implements OnModuleInit {
       grant_type: 'client_credentials',
       scope: 'openid',
     });
+  }
+
+  private async discoverIssuer(Issuer: unknown, issuerUrl: string): Promise<OidcIssuer> {
+    const issuerConstructor = Issuer as OidcIssuerConstructor;
+    const issuer = await issuerConstructor.discover(issuerUrl);
+    const backchannelBaseUrl = this.getRequiredEnv('OIDC_BACKCHANNEL_BASE_URL');
+    return new issuerConstructor(this.rewriteBackchannelMetadata(issuer.metadata, backchannelBaseUrl));
+  }
+
+  private rewriteBackchannelMetadata(metadata: OidcMetadata, backchannelBaseUrl: string): OidcMetadata {
+    const issuerUrl = this.parseUrlValue(metadata.issuer);
+    if (!issuerUrl) {
+      return metadata;
+    }
+
+    return BACKCHANNEL_ENDPOINTS.reduce(
+      (next, key) => {
+        const endpoint = this.rewriteIssuerEndpoint(next[key], issuerUrl, backchannelBaseUrl);
+        if (endpoint) {
+          next[key] = endpoint;
+        }
+
+        return next;
+      },
+      { ...metadata }
+    );
+  }
+
+  private rewriteIssuerEndpoint(rawEndpoint: unknown, issuerUrl: URL, backchannelBaseUrl: string): string | undefined {
+    const endpointUrl = this.parseUrlValue(rawEndpoint);
+    if (!endpointUrl || endpointUrl.origin !== issuerUrl.origin) {
+      return undefined;
+    }
+
+    const issuerPath = issuerUrl.pathname.replace(/\/$/, '');
+    if (issuerPath && endpointUrl.pathname !== issuerPath && !endpointUrl.pathname.startsWith(`${issuerPath}/`)) {
+      return undefined;
+    }
+
+    const suffix = issuerPath ? endpointUrl.pathname.slice(issuerPath.length) || '/' : endpointUrl.pathname;
+    const baseUrl = new URL(backchannelBaseUrl);
+    const basePath = baseUrl.pathname.replace(/\/$/, '');
+    const suffixPath = suffix.startsWith('/') ? suffix : `/${suffix}`;
+    baseUrl.pathname = `${basePath}${suffixPath}`.replace(/\/{2,}/g, '/');
+    baseUrl.search = endpointUrl.search;
+    baseUrl.hash = '';
+
+    return baseUrl.toString();
+  }
+
+  private parseUrlValue(value: unknown): URL | undefined {
+    if (typeof value !== 'string' || !value) {
+      return undefined;
+    }
+
+    try {
+      return new URL(value);
+    } catch {
+      return undefined;
+    }
   }
 
   private safeEquals(a: string, b: string): boolean {

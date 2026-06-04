@@ -61,6 +61,7 @@ export const envValidators = {
   SUBSCRIBER_WIDGET_JWT_EXPIRATION_TIME: str({ default: '15 days' }),
   NOVU_REGION: str({ default: 'local' }),
   NOVU_SECRET_KEY: str({ default: '' }),
+  OIDC_BACKCHANNEL_BASE_URL: url(),
   OIDC_BOOTSTRAP_CLIENT_ID: str(),
   OIDC_BOOTSTRAP_CLIENT_SECRET: str(),
   OIDC_BOOTSTRAP_USER_EMAIL: str(),
